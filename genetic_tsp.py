@@ -7,11 +7,12 @@ TOURNEMET_SIZE = 2
 class GeneticAlgorithm:
 
     def __init__(self, generation_count, population_size, crossover_rate,
-                 mutation_rate):
+                 mutation_rate, constraint_handle_type):
         self.generation_count = generation_count
         self.population_size = population_size
         self.crossover_rate = crossover_rate
         self.mutation_rate = mutation_rate
+        self.constraint_handle_type = constraint_handle_type
         self.genom_size = 0
         self.capacity = 0
         self.weights = []
@@ -125,6 +126,20 @@ class GeneticAlgorithm:
 
         return self.get_best_genom(contenders)
 
+    def penalty(self, genom, weight):
+
+    def repair(self, genom, weight):
+
+    def death(self, genom, weight):
+
+    def handle(self,current_genom, current_genom_weight):
+        handle_method = {
+                'penalty' : self.penalty,
+                'repair': self.repair,
+                'death': self.death
+                }[self.constraint_handle_type]
+        return handle_method(current_genom, current_genom_weight)
+
     def run(self):
         population = self.initialize_population()
         very_best_genom_fitness = 0
@@ -145,9 +160,15 @@ class GeneticAlgorithm:
             population.append(best_previous)
 
             current_genom = self.get_best_genom(childs)
-            current_genom_fitness = self.evaluate(current_genom)['value']
+            current_genom_info = self.evaluate(current_genom)
+            current_genom_weight = current_genom_info['weight']
+            if(current_genom_weight > self.capacity):
+                self.handle(current_genom, current_genom_weight)
+
+
+            current_genom_fitness = current_genom_info['value']
             if very_best_genom_fitness < current_genom_fitness:
                 very_best_genom_fitness = current_genom_fitness
                 very_best_genom = current_genom
 
-        return very_best_genom, very_best_genom_fitness
+        return very_best_genom, very_best_genom_fitness, current_genom_weight, self.capacity 
