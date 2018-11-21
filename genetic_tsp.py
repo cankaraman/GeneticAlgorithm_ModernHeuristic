@@ -7,12 +7,13 @@ TOURNEMET_SIZE = 2
 class GeneticAlgorithm:
 
     def __init__(self, generation_count, population_size, crossover_rate,
-                 mutation_rate, constraint_handle_type):
+                 mutation_rate, constraint_handle_type, problem):
         self.generation_count = generation_count
         self.population_size = population_size
         self.crossover_rate = crossover_rate
         self.mutation_rate = mutation_rate
         self.constraint_handle_type = constraint_handle_type
+        self.problem = problem
         self.genom_size = 0
         self.capacity = 0
         self.weights = []
@@ -20,7 +21,7 @@ class GeneticAlgorithm:
         self.load_data()
 
     def load_data(self):
-        problem = "p06"
+        problem = self.problem
 
         # read values
         file_type = "_p.txt"
@@ -37,7 +38,7 @@ class GeneticAlgorithm:
         file_type = "_c.txt"
         file_name = problem + file_type
         file = open(file_name, "r")
-        capacity = int(file.readline())
+        self.capacity = int(file.readline())
         file.close()
 
         # read weights
@@ -50,19 +51,31 @@ class GeneticAlgorithm:
 
     def flip_bit(self, genom, index):
         new_genom = genom.copy()
-        new_genom[index] = ~genom[index]+2
+        #if index > len(genom):
+        #    return new_genom
+
+        try:
+            new_genom[index] = ~genom[index]+2
+        except:
+            pass
         return new_genom
 
     def evaluate(self, genom):
         knapsack_value = 0
         knapsack_weight = 0
+        if len(genom) < self.genom_size:
+            return {'value': 0, 'weight': self.capacity * 2}
         for i in range(self.genom_size):
-        #    try:
+            try:
                 if genom[i] == 1:
                     knapsack_value += self.values[i]
                     knapsack_weight += self.weights[i]
-        ##    except IndexError:
-         ##       pdb.set_trace()
+            except TypeError:
+                # pdb.set_trace()
+                pass
+            except IndexError:
+                #pdb.set_trace()
+                pass
 
         return {'value': knapsack_value, 'weight': knapsack_weight}
 
@@ -75,6 +88,8 @@ class GeneticAlgorithm:
     def create_childs(self, parents):
         # crossover parents using random index
         index = random.randint(0, self.genom_size)
+        if len(parents) < 2:
+            return parents[0], parents[0]
 
         i = 0
         if random.random() < self.crossover_rate:
@@ -104,6 +119,8 @@ class GeneticAlgorithm:
         worst_genom = []
 
         for genom in genoms:
+            # if not genom:
+            #    pdb.set_trace()
             current_fitness = self.evaluate(genom)['value']
             if current_fitness > worst_fitness:
                 worst_genom = genom
@@ -132,26 +149,35 @@ class GeneticAlgorithm:
         return self.get_best_genom(contenders)
 
     def penalty(self, genom, weight):
-        return "penalty", []
+        return "penalty", genom
 
     def repair(self, genom, weight):
-        return "repair", []
+        index = random.randint(0, len(genom)-1)
+        genom = self.flip_bit(genom, index)
+        genom_weight = self.evaluate(genom)['weight']
+        while genom_weight > self.capacity:
+            index = random.randint(0, len(genom)-1)
+            genom = self.flip_bit(genom, index)
+            genom_weight = self.evaluate(genom)['weight']
+
+        return "repair", genom
 
     def death(self, genom, weight):
         return "death", genom
 
-    def handle(self,current_genom, current_genom_weight):
+    def handle(self, current_genom, current_genom_weight):
         handle_method = {
-                'penalty' : self.penalty,
-                'repair': self.repair,
-                'death': self.death
-                }[self.constraint_handle_type]
+            'penalty': self.penalty,
+            'repair': self.repair,
+            'death': self.death
+        }[self.constraint_handle_type]
         return handle_method(current_genom, current_genom_weight)
 
     def run(self):
         population = self.initialize_population()
         very_best_genom_fitness = 0
-        very_best_genom = population[0]
+        very_best_genom = None
+        very_best_genom_weight = 0
 
         for i in range(self.generation_count):
             childs = []
@@ -160,8 +186,8 @@ class GeneticAlgorithm:
                            range(2)]
                 childs.extend(self.create_childs(parents))
 
-            #bootleg elitism. delete the worst add the best from previous
-            #generaion
+            # bootleg elitism. delete the worst add the best from previous
+            # generaion
             best_previous = self.get_best_genom(population)
             population = childs.copy()
             worst_genom = self.get_worst_genom(population)
@@ -170,10 +196,12 @@ class GeneticAlgorithm:
             population.append(best_previous)
             self.population_size = len(population)
 
-            #childs comes back empty
+            # childs comes back empty
+            # if not childs:
+            #    continue
             current_genom = self.get_best_genom(childs)
-            if not current_genom:
-                pdb.set_trace()
+            #if not current_genom:
+            #    pdb.set_trace()
             current_genom_info = self.evaluate(current_genom)
             current_genom_weight = current_genom_info['weight']
 
@@ -185,15 +213,29 @@ class GeneticAlgorithm:
                 handle_type = handle_result[0]
 
                 if handle_type == "death" and current_genom in population:
-                    handle_type = "" 
+                    handle_type = ""
                     population.remove(current_genom)
+                    population.append(self.initialize_genom())
                     self.population_size = len(population)
                     current_genom_info['value'] = 0
+                elif handle_type == "penalty" and current_genom in population:
+                    handle_type = ""
+                    current_genom_info['value'] -= (
+                        current_genom_info['value']/3)*2
 
+                else:
+                    handle_type = ""
+                    current_genom_info = self.evaluate(current_genom)
 
             current_genom_fitness = current_genom_info['value']
-            if very_best_genom_fitness < current_genom_fitness:
+            if (very_best_genom_fitness < current_genom_fitness and
+                    current_genom_weight <= self.capacity):
                 very_best_genom_fitness = current_genom_fitness
+                very_best_genom_weight = current_genom_weight
                 very_best_genom = current_genom
 
-        return very_best_genom, very_best_genom_fitness, current_genom_weight, self.capacity 
+        # if current_genom_weight > self.capacity:
+        #    pdb.set_trace()
+        if very_best_genom is not None:
+            vbg_info = self.evaluate(very_best_genom)
+            return very_best_genom, vbg_info['value'], vbg_info['weight'], self.capacity
