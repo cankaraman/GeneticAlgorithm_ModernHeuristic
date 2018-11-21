@@ -57,9 +57,12 @@ class GeneticAlgorithm:
         knapsack_value = 0
         knapsack_weight = 0
         for i in range(self.genom_size):
-            if genom[i] == 1:
-                knapsack_value += self.values[i]
-                knapsack_weight += self.weights[i]
+        #    try:
+                if genom[i] == 1:
+                    knapsack_value += self.values[i]
+                    knapsack_weight += self.weights[i]
+        ##    except IndexError:
+         ##       pdb.set_trace()
 
         return {'value': knapsack_value, 'weight': knapsack_weight}
 
@@ -95,6 +98,7 @@ class GeneticAlgorithm:
                 child2 = self.flip_bit(child2, mutation_index)
 
         return child1, child2
+
     def get_worst_genom(self, genoms):
         worst_fitness = 0
         worst_genom = []
@@ -120,6 +124,7 @@ class GeneticAlgorithm:
     def tournement_selection(self, genoms):
         contenders = []
         t_size = TOURNEMET_SIZE
+        self.population_size = len(genoms)
         for i in range(t_size):
             random_index = random.randint(0, self.population_size - 1)
             contenders.append(genoms[random_index])
@@ -127,10 +132,13 @@ class GeneticAlgorithm:
         return self.get_best_genom(contenders)
 
     def penalty(self, genom, weight):
+        return "penalty", []
 
     def repair(self, genom, weight):
+        return "repair", []
 
     def death(self, genom, weight):
+        return "death", genom
 
     def handle(self,current_genom, current_genom_weight):
         handle_method = {
@@ -156,14 +164,31 @@ class GeneticAlgorithm:
             #generaion
             best_previous = self.get_best_genom(population)
             population = childs.copy()
-            population.remove(self.get_worst_genom(population))
+            worst_genom = self.get_worst_genom(population)
+            if worst_genom in population:
+                population.remove(self.get_worst_genom(population))
             population.append(best_previous)
+            self.population_size = len(population)
 
+            #childs comes back empty
             current_genom = self.get_best_genom(childs)
+            if not current_genom:
+                pdb.set_trace()
             current_genom_info = self.evaluate(current_genom)
             current_genom_weight = current_genom_info['weight']
-            if(current_genom_weight > self.capacity):
-                self.handle(current_genom, current_genom_weight)
+
+            handle_type = ""
+            if current_genom_weight > self.capacity:
+                handle_result = self.handle(
+                    current_genom, current_genom_weight)
+                current_genom = handle_result[1]
+                handle_type = handle_result[0]
+
+                if handle_type == "death" and current_genom in population:
+                    handle_type = "" 
+                    population.remove(current_genom)
+                    self.population_size = len(population)
+                    current_genom_info['value'] = 0
 
 
             current_genom_fitness = current_genom_info['value']
